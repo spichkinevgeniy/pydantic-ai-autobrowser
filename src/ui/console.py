@@ -63,6 +63,18 @@ class ConsoleProgressUI:
                 self._print_block("  Instruction", event.message)
             return
 
+        if event.event_type == "security_approval_requested":
+            self._section("SECURITY APPROVAL REQUIRED", self.RED)
+            if event.message:
+                self._print_block("  Instruction", event.message)
+            reason = str(event.data.get("reason", "")).strip()
+            preview = str(event.data.get("preview", "")).strip()
+            if reason:
+                self._print_block("  Reason", reason)
+            if preview:
+                self._print_block("  Preview", preview)
+            return
+
         if event.event_type == "human_input_received":
             self._section("HUMAN INPUT", self.CYAN)
             print("  Value received")
@@ -71,6 +83,16 @@ class ConsoleProgressUI:
         if event.event_type == "human_manual_action_confirmed":
             self._section("HUMAN ACTION", self.CYAN)
             print("  Manual browser action confirmed")
+            return
+
+        if event.event_type == "security_approval_received":
+            self._section("SECURITY", self.CYAN)
+            print("  Risky action approved")
+            return
+
+        if event.event_type == "security_action_rejected":
+            self._section("SECURITY", self.YELLOW)
+            print("  Risky action rejected; replanning")
             return
 
         if event.event_type == "browser_running":
@@ -148,6 +170,24 @@ class ConsoleProgressUI:
         self._section("ACTION NEEDED FROM YOU", self.RED)
         print(f"  Type: {request.kind}")
         self._print_block("  Instruction", request.instruction)
+
+        if request.response_mode == "approval_confirmation":
+            if request.reason:
+                self._print_block("  Reason", request.reason)
+            if request.preview:
+                self._print_block("  Preview", request.preview)
+            print("  Commands:")
+            print("    approve  -> allow this risky action")
+            print("    reject   -> do not perform it and replan")
+            print("    abort    -> stop the run")
+            while True:
+                command = input("Command: ").strip().lower()
+                if command == "approve":
+                    return HumanActionResponse(action="approve")
+                if command == "reject":
+                    return HumanActionResponse(action="reject")
+                if command == "abort":
+                    return HumanActionResponse(action="abort")
 
         if request.response_mode == "provide_value":
             prompt = request.prompt or "Enter the requested value"

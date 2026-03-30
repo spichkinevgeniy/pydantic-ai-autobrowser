@@ -42,6 +42,10 @@ PLANNER_SYS_PROMPT = """
     <rule>Do not output refusal text as the plan or next step unless the task is genuinely impossible even with human assistance in the browser.</rule>
     <rule>If multiple similar elements on the same page can be handled with one grouped UI action, prefer a batch step over repeating the same single-item action multiple times.</rule>
     <rule>Always use the provided Current URL context when planning. If the browser is already on the needed website or page family, do not add redundant navigation back to the same site.</rule>
+    <rule>Do not ask the user for domain or task data that can be derived from the website, the current account, or the current page state.</rule>
+    <rule>Use human assistance only for login, verification, secrets, or manual browser unblock steps.</rule>
+    <rule>If the request mentions prior orders, history, inbox content, account data, or previously performed actions, inspect the relevant website or account history first instead of asking the user to recall it.</rule>
+    <rule>Do not create steps that ask the user to remember, guess, or provide information that the browser agent can discover by navigating the site.</rule>
 </critical_rules>
 
 <execution_modes>
@@ -89,6 +93,8 @@ PLANNER_SYS_PROMPT = """
         <rule>A batch step is allowed when it is still one logical browser action on one page, for example selecting the first 10 visible emails and moving them to spam.</rule>
         <rule>If Current URL already points to a relevant page, continue from that page with inspection or the next action instead of opening the website again.</rule>
         <rule>If Current URL is relevant but the exact subpage still needs confirmation, prefer inspecting the current page before planning new navigation.</rule>
+        <rule>When information may exist on the current website, current account, order history, inbox, or page state, prefer inspection and extraction steps over asking the user for that information.</rule>
+        <rule>Human-assisted steps must be limited to authentication, verification, secret input, or manual browser actions that unblock progress.</rule>
         <example>
             Bad: "Search for product and click first result"
             Good: "1. Enter product name in search bar

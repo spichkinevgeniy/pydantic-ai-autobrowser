@@ -10,9 +10,10 @@ HumanActionKind = Literal[
     "otp",
     "captcha",
     "manual_browser_action",
+    "security_approval",
 ]
-HumanResponseMode = Literal["provide_value", "manual_confirmation"]
-HumanActionResponseType = Literal["provide_value", "manual_done", "abort"]
+HumanResponseMode = Literal["provide_value", "manual_confirmation", "approval_confirmation"]
+HumanActionResponseType = Literal["provide_value", "manual_done", "approve", "reject", "abort"]
 BrowserStepStatus = Literal["completed", "blocked_for_human"]
 
 
@@ -22,6 +23,8 @@ class HumanActionRequest(BaseModel):
     prompt: str = ""
     response_mode: HumanResponseMode
     sensitive: bool = False
+    reason: str = ""
+    preview: str = ""
 
 
 class HumanActionResponse(BaseModel):

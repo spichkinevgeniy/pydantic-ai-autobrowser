@@ -41,6 +41,23 @@ REFUSAL_MARKERS = (
     "security and privacy restrictions",
     "privacy restrictions",
 )
+PAYMENT_STEP_MARKERS = (
+    "pay",
+    "payment",
+    "checkout",
+    "place order",
+    "complete purchase",
+    "buy now",
+    "confirm payment",
+    "submit payment",
+)
+DELETE_STEP_MARKERS = (
+    "delete",
+    "remove",
+    "trash",
+    "permanently delete",
+    "empty trash",
+)
 
 
 class OrchestratorRuntime(Protocol):
@@ -102,6 +119,48 @@ def build_planner_prompt(
     prompt_without_url = re.sub(r"\nCurrent URL:.*$", "", base_prompt, flags=re.MULTILINE).rstrip()
     planner_url = current_url or "about:blank"
     return f"{prompt_without_url}\nCurrent URL: {planner_url}"
+
+
+def detect_security_approval_request(current_step: str) -> HumanActionRequest | None:
+    normalized_step = " ".join(current_step.lower().split())
+
+    if any(marker in normalized_step for marker in PAYMENT_STEP_MARKERS):
+        return HumanActionRequest(
+            kind="security_approval",
+            instruction="The next browser step looks like a payment or checkout action.",
+            response_mode="approval_confirmation",
+            reason="This step may charge money, place an order, or confirm a purchase.",
+            preview=current_step,
+        )
+
+    if any(marker in normalized_step for marker in DELETE_STEP_MARKERS):
+        return HumanActionRequest(
+            kind="security_approval",
+            instruction="The next browser step looks like a deletion action.",
+            response_mode="approval_confirmation",
+            reason="This step may permanently remove data or move content into a destructive state.",
+            preview=current_step,
+        )
+
+    return None
+
+
+def build_security_replan_feedback(
+    *,
+    user_query: str,
+    current_step: str,
+    current_url: str,
+    request: HumanActionRequest,
+) -> str:
+    return (
+        "The user rejected a risky browser action and asked for a safer replan.\n"
+        f"User query: {user_query}\n"
+        f"Current URL: {current_url or 'about:blank'}\n"
+        f"Rejected step: {current_step}\n"
+        f"Risk reason: {request.reason}\n\n"
+        "Do not repeat the rejected destructive step verbatim. Replan with a safer alternative, an "
+        "inspection step, or a step that prepares the action without executing the destructive change."
+    )
 
 
 async def run_browser_step_with_progress(
@@ -179,7 +238,11 @@ def request_human_action(
     request_event_type = (
         "human_input_requested"
         if request.response_mode == "provide_value"
-        else "human_manual_action_requested"
+        else (
+            "security_approval_requested"
+            if request.response_mode == "approval_confirmation"
+            else "human_manual_action_requested"
+        )
     )
     orchestrator.emit_event(
         request_event_type,
@@ -199,6 +262,22 @@ def request_human_action(
             iteration=iteration,
             current_step=current_step,
             data={"kind": request.kind, "sensitive": request.sensitive},
+        )
+    elif response.action == "approve":
+        orchestrator.emit_event(
+            "security_approval_received",
+            message="Human approved the risky action",
+            iteration=iteration,
+            current_step=current_step,
+            data={"kind": request.kind},
+        )
+    elif response.action == "reject":
+        orchestrator.emit_event(
+            "security_action_rejected",
+            message="Human rejected the risky action",
+            iteration=iteration,
+            current_step=current_step,
+            data={"kind": request.kind},
         )
     elif response.action == "manual_done":
         orchestrator.emit_event(
@@ -418,6 +497,36 @@ async def run_workflow(
                 plan=state.plan,
                 data={"current_url": state.current_url},
             )
+
+            security_request = detect_security_approval_request(state.current_step)
+            if security_request is not None:
+                security_response = request_human_action(
+                    orchestrator,
+                    security_request,
+                    iteration=state.iteration_counter,
+                    current_step=state.current_step,
+                )
+                if security_response.action == "abort":
+                    state.terminate = True
+                    result = build_user_abort_result(user_query, state.plan, state.current_step)
+                    orchestrator.emit_event(
+                        "run_finished",
+                        message="Run aborted by the user",
+                        iteration=state.iteration_counter,
+                        current_step=state.current_step,
+                        plan=state.plan,
+                        final_response=result.final_response,
+                    )
+                    return result
+                if security_response.action == "reject":
+                    state.planner_prompt = build_security_replan_feedback(
+                        user_query=user_query,
+                        current_step=state.current_step,
+                        current_url=state.current_url,
+                        request=security_request,
+                    )
+                    state.consecutive_step_errors = 0
+                    continue
 
             browser_stage = await execute_browser_stage(
                 orchestrator,

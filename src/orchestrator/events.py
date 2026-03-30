@@ -16,6 +16,9 @@ EventType = Literal[
     "human_input_received",
     "human_manual_action_requested",
     "human_manual_action_confirmed",
+    "security_approval_requested",
+    "security_approval_received",
+    "security_action_rejected",
     "run_failed",
     "run_finished",
 ]

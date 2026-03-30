@@ -76,6 +76,17 @@ BROWSER_SYS_PROMPT = """
        and then act.
 </click>
 
+<human_assistance_rules>
+    1. Human help is not for collecting task details, search parameters, or business data that can be
+       found on the website.
+    2. Only request human help for credentials, verification, secret values, or manual browser
+       actions that you cannot safely complete alone.
+    3. If the needed data may exist on the current website, current page, account history, order
+       history, or inbox, inspect and extract it first before asking the user anything.
+    4. Do not ask the human to supply names, identifiers, dates, or other task-specific details when
+       those details can be discovered from page content or account data.
+</human_assistance_rules>
+
 <enter_text>
     1. If you see that the input field already has a value and the task requires replacing it, clear
        the field before entering the new value.
