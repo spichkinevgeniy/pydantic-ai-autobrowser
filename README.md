@@ -82,7 +82,6 @@ The loop ends when the goal is reached, the user stops a manual or sensitive ste
 
 ```text
 .
-|-- main.py
 |-- src/
 |   |-- agents/
 |   |   |-- planner_agent.py
@@ -104,11 +103,11 @@ The loop ends when the goal is reached, the user stops a manual or sensitive ste
 `-- logs/
 ```
 
-- `main.py`: CLI entrypoint that starts the interactive or one-shot run.
 - `src/agents/`: planner, browser, and critique agents.
 - `src/orchestrator/`: run loop, state management, retries, and event flow.
 - `src/ui/`: console-facing interaction for prompts, pauses, and run output.
 - `src/utils/`: screenshots, screenshot analysis, and message parsing helpers.
+- `src/main.py`: CLI entrypoint that starts the interactive or one-shot run.
 - `src/config.py`: environment-driven runtime settings.
 - `src/logging_setup.py`: logging and observability setup.
 - `logs/`: runtime artifacts such as logs, screenshots, and saved conversations.
@@ -158,13 +157,13 @@ The old Gemini-style values are expected here, for example:
 ### Run
 
 ```bash
-uv run python main.py "Go to my Gmail inbox and move the first 10 emails to spam"
+uv run python -m src.main "Go to my Gmail inbox and move the first 10 emails to spam"
 ```
 
 You can also start in interactive mode:
 
 ```bash
-uv run python main.py
+uv run python -m src.main
 ```
 
 If the run needs login, OTP, secret input, or a manual browser step, follow the console prompt and continue from there.
