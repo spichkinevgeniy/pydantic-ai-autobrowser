@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.types import HumanActionRequest, HumanActionResponse
 from src.utils.msg_parser import AgentConversationHandler, ConversationStorage
 from src.utils.screenshot import ScreenshotHelper
 
@@ -14,6 +15,9 @@ class OrchestratorState:
     plan: str = ""
     current_step: str = ""
     planner_prompt: str = ""
+    waiting_for_user: bool = False
+    pending_human_request: HumanActionRequest | None = None
+    pending_human_response: HumanActionResponse | None = None
     message_histories: dict[str, list[Any]] = field(
         default_factory=lambda: {
             "planner": [],
@@ -32,6 +36,9 @@ class OrchestratorState:
         self.plan = ""
         self.current_step = ""
         self.planner_prompt = f"User Query: {user_query}\nFeedback: None"
+        self.waiting_for_user = False
+        self.pending_human_request = None
+        self.pending_human_response = None
         self.message_histories = {
             "planner": [],
             "browser": [],

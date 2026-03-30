@@ -5,7 +5,12 @@ from src.agents.browser_agent import get_playwright_mcp_server
 from src.orchestrator.events import EventHandler, EventType, OrchestratorEvent
 from src.orchestrator.state import OrchestratorState
 from src.orchestrator.workflow import run_workflow
-from src.types import OrchestratorRunResult
+from src.types import (
+    HumanActionRequest,
+    HumanActionResponse,
+    HumanInputHandler,
+    OrchestratorRunResult,
+)
 from src.utils.image_analysis import ImageAnalyzer
 
 
@@ -16,14 +21,17 @@ class Orchestrator:
         self._browser_server_entered = False
         self.state = OrchestratorState()
         self._event_handler: EventHandler | None = None
+        self._human_input_handler: HumanInputHandler | None = None
         ImageAnalyzer.clear_history()
 
     async def run(
         self,
         user_query: str,
         on_event: EventHandler | None = None,
+        human_input_handler: HumanInputHandler | None = None,
     ) -> OrchestratorRunResult:
         self._event_handler = on_event
+        self._human_input_handler = human_input_handler
         self.state.reset_for_run(user_query)
         ImageAnalyzer.clear_history()
         await self.start()
@@ -42,6 +50,7 @@ class Orchestrator:
         finally:
             await self.shutdown()
             self._event_handler = None
+            self._human_input_handler = None
 
     def emit_event(
         self,
@@ -67,6 +76,13 @@ class Orchestrator:
             data=data or {},
         )
         self._event_handler(event)
+
+    def request_human_action(self, request: HumanActionRequest) -> HumanActionResponse:
+        if self._human_input_handler is None:
+            raise RuntimeError(
+                "Human input is required but no human_input_handler was provided."
+            )
+        return self._human_input_handler(request)
 
     async def start(self) -> None:
         if self._started:

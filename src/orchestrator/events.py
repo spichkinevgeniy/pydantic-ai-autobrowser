@@ -10,6 +10,12 @@ EventType = Literal[
     "browser_running",
     "browser_completed",
     "critique_completed",
+    "run_paused",
+    "run_resumed",
+    "human_input_requested",
+    "human_input_received",
+    "human_manual_action_requested",
+    "human_manual_action_confirmed",
     "run_failed",
     "run_finished",
 ]

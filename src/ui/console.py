@@ -1,8 +1,9 @@
+import getpass
 import sys
 from pathlib import Path
 
 from src.orchestrator import OrchestratorEvent
-from src.types import OrchestratorRunResult
+from src.types import HumanActionRequest, HumanActionResponse, OrchestratorRunResult
 
 
 class ConsoleProgressUI:
@@ -36,6 +37,37 @@ class ConsoleProgressUI:
             if event.plan and event.plan != self._last_plan:
                 self._last_plan = event.plan
                 self._print_block("  Plan", event.plan)
+            return
+
+        if event.event_type == "run_paused":
+            print()
+            print(self._line("WAITING FOR HUMAN ACTION", color=self.RED, bold=True))
+            return
+
+        if event.event_type == "run_resumed":
+            print(self._line("RESUMING EXECUTION", color=self.CYAN, bold=True))
+            return
+
+        if event.event_type == "human_input_requested":
+            self._section("HUMAN INPUT REQUIRED", self.RED)
+            if event.message:
+                self._print_block("  Instruction", event.message)
+            return
+
+        if event.event_type == "human_manual_action_requested":
+            self._section("HUMAN ACTION REQUIRED", self.RED)
+            if event.message:
+                self._print_block("  Instruction", event.message)
+            return
+
+        if event.event_type == "human_input_received":
+            self._section("HUMAN INPUT", self.CYAN)
+            print("  Value received")
+            return
+
+        if event.event_type == "human_manual_action_confirmed":
+            self._section("HUMAN ACTION", self.CYAN)
+            print("  Manual browser action confirmed")
             return
 
         if event.event_type == "browser_running":
@@ -108,6 +140,49 @@ class ConsoleProgressUI:
     def _section(self, name: str, color: str) -> None:
         print(self._line(name, color=color, bold=True))
 
+    def request_human_action(self, request: HumanActionRequest) -> HumanActionResponse:
+        print()
+        self._section("ACTION NEEDED FROM YOU", self.RED)
+        print(f"  Type: {request.kind}")
+        self._print_block("  Instruction", request.instruction)
+
+        if request.response_mode == "provide_value":
+            prompt = request.prompt or "Enter the requested value"
+            if request.sensitive:
+                print("  Commands:")
+                print("    enter    -> input the value hidden")
+                print("    /manual  -> do it yourself in the browser and then continue")
+                print("    /abort   -> stop the run")
+                while True:
+                    command = input("Command: ").strip().lower()
+                    if command == "/abort":
+                        return HumanActionResponse(action="abort")
+                    if command == "/manual":
+                        self._print_manual_followup()
+                        return self._await_manual_confirmation()
+                    if command in {"", "enter"}:
+                        secret_value = getpass.getpass(f"{prompt} (hidden): ").strip()
+                        if secret_value:
+                            return HumanActionResponse(action="provide_value", value=secret_value)
+                return HumanActionResponse(action="abort")
+
+            print("  Commands:")
+            print("    /manual  -> do it yourself in the browser and then continue")
+            print("    /abort   -> stop the run")
+            while True:
+                command = input(f"{prompt}: ").strip()
+                if not command:
+                    continue
+                if command == "/abort":
+                    return HumanActionResponse(action="abort")
+                if command == "/manual":
+                    self._print_manual_followup()
+                    return self._await_manual_confirmation()
+                return HumanActionResponse(action="provide_value", value=command)
+
+        self._print_manual_followup()
+        return self._await_manual_confirmation()
+
     def _print_block(self, title: str, text: str) -> None:
         print(f"{title}:")
         for line in str(text).splitlines():
@@ -115,6 +190,19 @@ class ConsoleProgressUI:
                 print(f"    {line}")
             else:
                 print()
+
+    def _print_manual_followup(self) -> None:
+        print("  Complete the action manually in the browser, then type:")
+        print("    done    -> continue")
+        print("    abort   -> stop the run")
+
+    def _await_manual_confirmation(self) -> HumanActionResponse:
+        while True:
+            command = input("Command: ").strip().lower()
+            if command == "done":
+                return HumanActionResponse(action="manual_done")
+            if command == "abort":
+                return HumanActionResponse(action="abort")
 
     def _line(self, text: str, *, color: str = "", bold: bool = False) -> str:
         if not self._use_color:

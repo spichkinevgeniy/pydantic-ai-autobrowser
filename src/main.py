@@ -46,7 +46,11 @@ async def async_main() -> int:
         return 1
 
     try:
-        result = await run_orchestration(user_query, on_event=ui.handle_event)
+        result = await run_orchestration(
+            user_query,
+            on_event=ui.handle_event,
+            human_input_handler=ui.request_human_action,
+        )
     except Exception:
         logger.exception("Во время обработки запроса произошла ошибка")
         print("\nНе удалось обработать запрос.")

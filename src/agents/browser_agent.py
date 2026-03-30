@@ -1,4 +1,5 @@
 import logging
+import warnings
 from collections.abc import Sequence
 from functools import lru_cache
 
@@ -6,11 +7,20 @@ from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.messages import ModelMessage
-from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.providers.google import GoogleProvider
-from pydantic_ai.run import AgentRunResult
-from pydantic_ai.settings import ModelSettings
-from src.config import ROOT_DIR, settings
+
+warnings.filterwarnings(
+    "ignore",
+    message=r".*_UnionGenericAlias.*deprecated.*",
+    category=DeprecationWarning,
+    module=r"google\.genai\.types",
+)
+
+from pydantic_ai.models.google import GoogleModel  # noqa: E402
+from pydantic_ai.providers.google import GoogleProvider  # noqa: E402
+from pydantic_ai.run import AgentRunResult  # noqa: E402
+from pydantic_ai.settings import ModelSettings  # noqa: E402
+from src.config import ROOT_DIR, settings  # noqa: E402
+from src.types import BrowserStepResult, HumanActionResponse  # noqa: E402
 
 BROWSER_SYS_PROMPT = """
 <agent_role>
@@ -89,14 +99,25 @@ BROWSER_SYS_PROMPT = """
 </post_action_verification>
 
 <output_generation>
-    1. Once the task is completed or cannot be completed, return a short summary of the actions you
-       performed to accomplish the task and what worked and what did not.
-    2. If the task requires an answer, also provide a short and precise answer.
-    3. Ensure that user questions are answered from page snapshots, extracted browser content, or
+    1. Return structured output with:
+       - status: either "completed" or "blocked_for_human"
+       - summary: short explanation of what happened
+       - answer: optional final factual answer from the page if relevant
+       - human_action: null unless a human is required
+    2. If you are blocked because a human must do something, set status="blocked_for_human" and fill
+       human_action with a precise instruction for the human.
+    3. If the human can provide a value in the console, use response_mode="provide_value" and say
+       exactly what value is needed, for example password, OTP, phone number, or login.
+    4. If the human must do the task manually in the browser, use response_mode="manual_confirmation"
+       and explain exactly what they must complete before typing done in the console.
+    5. When blocked for human help, do not make up credentials, codes, or personal data.
+    6. Never repeat or reveal secret values in summary or answer, even if they were provided by the
+       human for this step.
+    7. Ensure that user questions are answered from page snapshots, extracted browser content, or
        other browser tool outputs, not from memory or assumptions.
-    4. Do not provide internal refs or low-level Playwright MCP identifiers in your response unless
+    8. Do not provide internal refs or low-level Playwright MCP identifiers in your response unless
        explicitly asked.
-    5. Do not repeat the same action multiple times if it fails. If something did not work after a
+    9. Do not repeat the same action multiple times if it fails. If something did not work after a
        few attempts, let the critique know that you are going in a cycle and should terminate.
 </output_generation>
 
@@ -203,25 +224,46 @@ def get_browser_agent() -> Agent:
             temperature=0.2,
             timeout=BROWSER_AGENT_TIMEOUT_SECONDS,
         ),
+        output_type=BrowserStepResult,
         toolsets=[get_playwright_mcp_server()],
     )
 
 
 async def run_browser_step(
     current_step: str,
+    human_response: HumanActionResponse | None = None,
     message_history: Sequence[ModelMessage] | None = None,
-) -> AgentRunResult[str]:
+) -> AgentRunResult[BrowserStepResult]:
     logger.info("Browser agent started step execution")
     logger.info("Browser current step: %s", current_step)
+    user_prompt = current_step
+
+    if human_response is not None:
+        if human_response.action == "provide_value":
+            user_prompt = (
+                f"{current_step}\n\n"
+                "Human assistance context:\n"
+                "The human provided the requested value for this step. Use it now, but do not repeat "
+                "the value in your summary or answer.\n"
+                f"Provided value: {human_response.value}"
+            )
+        elif human_response.action == "manual_done":
+            user_prompt = (
+                f"{current_step}\n\n"
+                "Human assistance context:\n"
+                "The human completed the required manual action in the browser. Inspect the current "
+                "page state, verify what changed, and continue from there."
+            )
 
     result = await get_browser_agent().run(
-        user_prompt=current_step,
+        user_prompt=user_prompt,
         deps=BrowserStepDeps(current_step=current_step),
         message_history=message_history,
     )
 
     logger.info("Browser agent completed step execution")
-    logger.info("Browser agent output: %s", result.output)
+    logger.info("Browser agent status: %s", result.output.status)
+    logger.info("Browser agent summary: %s", result.output.summary)
     return result
 
 

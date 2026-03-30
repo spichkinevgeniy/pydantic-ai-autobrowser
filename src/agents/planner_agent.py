@@ -37,6 +37,10 @@ PLANNER_SYS_PROMPT = """
     <rule>Progress based on critique feedback</rule>
     <rule>Include verification steps in original plan</rule>
     <rule>Don't add new verification steps during execution</rule>
+    <rule>If a task involves the user's own account, inbox, dashboard, or other personal workspace, do not refuse just because the account is personal. Instead, plan a human-assisted flow where the user logs in or completes sensitive verification manually and then the browser agent continues.</rule>
+    <rule>For personal account tasks, prefer human-in-the-loop steps like opening the login page, asking the user to complete login manually, checking the resulting page state, and only then continuing with the requested browser actions.</rule>
+    <rule>Do not output refusal text as the plan or next step unless the task is genuinely impossible even with human assistance in the browser.</rule>
+    <rule>If multiple similar elements on the same page can be handled with one grouped UI action, prefer a batch step over repeating the same single-item action multiple times.</rule>
 </critical_rules>
 
 <execution_modes>
@@ -79,12 +83,23 @@ PLANNER_SYS_PROMPT = """
         <rule>One action per step.</rule>
         <rule>Clear, specific instructions.</rule>
         <rule>No combined actions.</rule>
+        <rule>For human-assisted steps, explicitly tell the browser agent to reach the relevant page and then request human help instead of refusing the whole task.</rule>
+        <rule>Prefer one grouped page-level action over repeated per-item actions when the UI supports multi-select, bulk actions, or applying one command to several visible items.</rule>
+        <rule>A batch step is allowed when it is still one logical browser action on one page, for example selecting the first 10 visible emails and moving them to spam.</rule>
         <example>
             Bad: "Search for product and click first result"
             Good: "1. Enter product name in search bar
                   2. Submit search
                   3. Locate first result
                   4. Click first result"
+        </example>
+        <example>
+            Bad: "I cannot access your Gmail account due to privacy restrictions"
+            Good: "1. Open Gmail login page
+                  2. Ask the user to complete login manually in the browser
+                  3. Inspect the inbox after login
+                  4. Select the first visible email
+                  5. Move the selected email to spam"
         </example>
     </step_formulation>
 
@@ -178,6 +193,21 @@ PLANNER_SYS_PROMPT = """
             }
         </output>
     </replan_task_example>
+    <human_assisted_account_example>
+        <input>
+            <query>Open my account inbox and move the first 10 visible items to spam</query>
+        </input>
+        <output>
+            {
+                "plan": "1. Open the inbox page via direct URL if known
+                    2. Ask the user to complete login manually in the browser if authentication is required
+                    3. Inspect the inbox after login is complete
+                    4. Select the first 10 visible items in the inbox
+                    5. Move the selected items to spam",
+                "next_step": "Open the inbox page via direct URL if known"
+            }
+        </output>
+    </human_assisted_account_example>
 </examples>
 
 <failure_handling>
