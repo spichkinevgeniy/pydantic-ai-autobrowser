@@ -1,7 +1,8 @@
 import json
 import logging
-from dataclasses import replace
 from collections.abc import Sequence
+from dataclasses import replace
+from pathlib import Path
 from pprint import pformat
 from typing import Any
 
@@ -9,6 +10,9 @@ from pydantic_ai.messages import ModelRequest, ToolReturnPart
 from src.agents.browser_agent import get_playwright_mcp_server, run_browser_step
 from src.agents.critique_agent import run_critique
 from src.agents.planner_agent import create_plan
+from src.config import settings
+from src.services.image_analyzer import ImageAnalyzer
+from src.services.screenshot_service import ScreenshotService
 from src.types import OrchestratorRunResult
 from src.utils.msg_parser import AgentConversationHandler, ConversationStorage
 
@@ -235,6 +239,8 @@ class Orchestrator:
         }
         self.conversation_handler = AgentConversationHandler()
         self.conversation_storage = ConversationStorage()
+        self.screenshot_service = ScreenshotService()
+        ImageAnalyzer.clear_history()
 
     async def run(self, user_query: str) -> OrchestratorRunResult:
         await self.start()
@@ -290,11 +296,24 @@ class Orchestrator:
                         raise
 
                     tool_interactions_str: str | None = None
+                    ss_analysis = ""
+                    pre_action_ss: Path | None = None
+                    post_action_ss: Path | None = None
                     try:
                         browser_history = filter_dom_messages(self.message_histories["browser"])
+                        pre_action_ss = await self.screenshot_service.capture(
+                            "pre",
+                            self.iteration_counter,
+                            full_page=settings.SCREENSHOT_FULL_PAGE,
+                        )
                         browser_output = await run_browser_step(
                             current_step=current_step,
                             message_history=browser_history,
+                        )
+                        post_action_ss = await self.screenshot_service.capture(
+                            "post",
+                            self.iteration_counter,
+                            full_page=settings.SCREENSHOT_FULL_PAGE,
                         )
 
                         self.conversation_handler.add_browser_nav_message(browser_output)
@@ -304,9 +323,38 @@ class Orchestrator:
                         tool_interactions_str = extract_tool_interactions(new_messages)
                         all_messages = browser_output.all_messages()
                         self.logger.info(
+                            "All messages from browser agent (%s messages):\n%s",
+                            len(all_messages),
+                            format_payload(all_messages),
+                        )
+                        self.logger.info(
                             "Tool interactions from browser agent:\n%s",
                             tool_interactions_str or "No tool interactions recorded.",
                         )
+                        self.logger.info(
+                            "Screenshot paths for iteration %s: pre=%s post=%s",
+                            self.iteration_counter,
+                            pre_action_ss,
+                            post_action_ss,
+                        )
+
+                        if pre_action_ss and post_action_ss:
+                            analyzer = ImageAnalyzer(
+                                image1_path=pre_action_ss,
+                                image2_path=post_action_ss,
+                                next_step=current_step,
+                            )
+                            ss_analysis = await analyzer.analyze_images()
+                            if ss_analysis:
+                                self.logger.info("Screenshot analysis:\n%s", ss_analysis)
+                            else:
+                                self.logger.info(
+                                    "Screenshot analysis skipped or returned empty output"
+                                )
+                        else:
+                            self.logger.info(
+                                "Screenshot analysis skipped because one or both screenshots are missing"
+                            )
                     except Exception:
                         self.logger.exception(
                             "Browser agent error on iteration %s",
@@ -328,7 +376,7 @@ class Orchestrator:
                             current_step=current_step,
                             orignal_plan=plan,
                             tool_response=critique_tool_response,
-                            ss_analysis="",
+                            ss_analysis=ss_analysis,
                             message_history=critique_history,
                         )
                         self.conversation_handler.add_critique_message(critique_response)
