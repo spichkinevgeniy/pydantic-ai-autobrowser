@@ -158,7 +158,7 @@ The old Gemini-style values are expected here, for example:
 ### Run
 
 ```bash
-uv run python main.py "Open Habr and list 5 popular articles from today"
+uv run python main.py "Go to my Gmail inbox and move the first 10 emails to spam"
 ```
 
 You can also start in interactive mode:
