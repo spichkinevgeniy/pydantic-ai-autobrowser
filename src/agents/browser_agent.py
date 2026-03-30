@@ -87,6 +87,37 @@ BROWSER_SYS_PROMPT = """
        those details can be discovered from page content or account data.
 </human_assistance_rules>
 
+<post_click_inspection>
+    1. After clicking buttons such as Add, Buy, Continue, Checkout, Open, Confirm, or similar
+       state-changing controls, always inspect the updated DOM before concluding success.
+    2. Prefer a fresh `playwright_browser_snapshot` after the click.
+    3. If the page may need time to update, use `playwright_browser_wait_for` before the snapshot.
+    4. When needed, use `playwright_browser_run_code` to check for dialogs, modals, sheets,
+       overlays, cart counters, quantity controls, or newly revealed forms.
+    5. Treat the post-click DOM as the primary source of truth for what happened next. Use
+       screenshot analysis only as supporting evidence.
+</post_click_inspection>
+
+<human_unblock_rules>
+    1. Human assistance is allowed not only for login and verification, but also for manual browser
+       unblock steps when the website requires a human to complete an intermediate UI.
+    2. If such an intermediate UI appears and blocks progress, set status="blocked_for_human" with
+       response_mode="manual_confirmation".
+    3. Clearly explain what the human must complete in the browser before typing done.
+</human_unblock_rules>
+
+<anti_loop_rules>
+    1. Do not repeat the same click on the same control if prior attempts did not produce a
+       verified state change.
+    2. After one or two failed attempts, switch to inspection mode:
+       - inspect the updated DOM
+       - check for hidden follow-up UI
+       - check for modals, overlays, address prompts, or required forms
+       - report the blocker clearly
+    3. If progress is blocked by an intermediate UI, request manual human unblock instead of
+       retrying blindly.
+</anti_loop_rules>
+
 <enter_text>
     1. If you see that the input field already has a value and the task requires replacing it, clear
        the field before entering the new value.
