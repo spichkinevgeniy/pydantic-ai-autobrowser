@@ -11,9 +11,15 @@ class AgentConversationHandler:
     def __init__(self) -> None:
         self.conversation_history: list[ChatCompletionMessageParam] = []
 
+    def add_browser_nav_message(self, browser_response: Any) -> None:
+        """Convert and store browser navigation agent messages"""
+        messages = self._extract_from_model_request(browser_response)
+        self.conversation_history.extend(messages)
+
     def _extract_tool_call(self, response_part: Any) -> Dict[str, Any]:
         """Extract tool call information from a response part."""
-        tool_call_id = getattr(response_part, "tool_call_id", str(uuid.uuid4()))
+        tool_call_id = getattr(
+            response_part, "tool_call_id", str(uuid.uuid4()))
         tool_name = getattr(response_part, "tool_name", "")
         args = {}
 
