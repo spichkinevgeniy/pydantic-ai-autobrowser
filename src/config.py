@@ -1,11 +1,9 @@
 """Конфигурация приложения и чтение настроек из окружения и `.env`."""
 
-from functools import lru_cache
 from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
@@ -22,8 +20,6 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
-
-
 
 
 settings = Settings()

@@ -28,8 +28,12 @@ async def async_main() -> int:
 
     print("\nПлан:")
     print(result.plan)
-    print("\nСледующий шаг:")
-    print(result.next_step)
+    if result.final_response:
+        print("\nФинальный ответ:")
+        print(result.final_response)
+    else:
+        print("\nСледующий шаг:")
+        print(result.next_step)
 
     logger.info("Приложение завершилось успешно")
     return 0

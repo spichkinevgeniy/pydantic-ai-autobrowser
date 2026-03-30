@@ -9,7 +9,6 @@ from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.settings import ModelSettings
-
 from src.config import settings
 
 PLANNER_SYS_PROMPT = """ 
@@ -225,7 +224,7 @@ def get_planner_agent() -> Agent:
             temperature=0.5,
             timeout=settings.MODEL_TIMEOUT_SECONDS,
         ),
-        output_type=PLANNER_AGENT_OP
+        output_type=PLANNER_AGENT_OP,
     )
 
 
@@ -243,6 +242,5 @@ async def create_plan(
         user_prompt=user_query,
         message_history=message_history,
     )
-    logger.info("Планировщик построил план. Следующий шаг: %s",
-                result.output.next_step)
+    logger.info("Планировщик построил план. Следующий шаг: %s", result.output.next_step)
     return result

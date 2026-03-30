@@ -3,9 +3,7 @@ from pathlib import Path
 
 import logfire
 from logfire.integrations.logging import LogfireLoggingHandler
-
 from src.config import settings
-
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 LOG_DIR = ROOT_DIR / "logs"
@@ -16,7 +14,9 @@ def configure_logging(level: int = logging.INFO) -> Path:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     root_logger = logging.getLogger()
-    if any(getattr(handler, "_auto_browser_demo_handler", False) for handler in root_logger.handlers):
+    if any(
+        getattr(handler, "_auto_browser_demo_handler", False) for handler in root_logger.handlers
+    ):
         root_logger.setLevel(level)
         return LOG_FILE
 

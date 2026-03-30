@@ -10,9 +10,7 @@ from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.run import AgentRunResult
 from pydantic_ai.settings import ModelSettings
-
 from src.config import settings
-
 
 BROWSER_SYS_PROMPT = """
 <agent_role>
