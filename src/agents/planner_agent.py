@@ -272,7 +272,7 @@ model = GoogleModel(settings.MODEL_NAME, provider=provider)
 
 logger = logging.getLogger(__name__)
 
-PLANNER_AGENT_RETRIES = 1
+PLANNER_AGENT_RETRIES = 2
 PLANNER_AGENT_TIMEOUT_SECONDS = 25.0
 
 

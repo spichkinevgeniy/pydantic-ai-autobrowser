@@ -240,7 +240,7 @@ model = GoogleModel(settings.MODEL_NAME, provider=provider)
 
 logger = logging.getLogger(__name__)
 
-BROWSER_AGENT_RETRIES = 1
+BROWSER_AGENT_RETRIES = 2
 BROWSER_AGENT_TIMEOUT_SECONDS = 45.0
 CURRENT_TAB_URL_PATTERN = re.compile(r"\(current\)\s.*\((?P<url>[^)]+)\)")
 PAGE_URL_PATTERN = re.compile(r"^- Page URL:\s*(?P<url>.+)$", re.MULTILINE)

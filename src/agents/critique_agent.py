@@ -103,7 +103,7 @@ model = GoogleModel(settings.MODEL_NAME, provider=provider)
 
 logger = logging.getLogger(__name__)
 
-CRITIQUE_AGENT_RETRIES = 1
+CRITIQUE_AGENT_RETRIES = 2
 CRITIQUE_AGENT_TIMEOUT_SECONDS = 25.0
 
 

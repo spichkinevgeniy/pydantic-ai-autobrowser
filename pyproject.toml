@@ -1,21 +1,51 @@
+[build-system]
+requires = ["setuptools>=80.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "auto-browser-demo2"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-agent browser automation demo built with PydanticAI and Playwright MCP."
 readme = "README.md"
 requires-python = ">=3.14"
+license = "MIT"
+authors = [
+    { name = "Eugiene Spichkin" },
+]
+keywords = [
+    "agent",
+    "automation",
+    "browser",
+    "pydantic-ai",
+    "playwright",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
-    "google-genai>=1.46.0",
     "logfire>=4.31.0",
+    "openai>=2.6.1",
     "pillow>=11.3.0",
     "pydantic-ai>=1.73.0",
     "pydantic-settings>=2.13.1",
 ]
 
+[project.scripts]
+auto-browser-demo2 = "src.main:main"
+
 [dependency-groups]
 dev = [
     "ruff>=0.15.8",
 ]
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+namespaces = true
 
 [tool.ruff]
 line-length = 100
