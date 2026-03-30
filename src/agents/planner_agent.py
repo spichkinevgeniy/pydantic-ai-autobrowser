@@ -212,6 +212,9 @@ model = GoogleModel(settings.MODEL_NAME, provider=provider)
 
 logger = logging.getLogger(__name__)
 
+PLANNER_AGENT_RETRIES = 1
+PLANNER_AGENT_TIMEOUT_SECONDS = 25.0
+
 
 @lru_cache(maxsize=1)
 def get_planner_agent() -> Agent:
@@ -219,10 +222,10 @@ def get_planner_agent() -> Agent:
         model=model,
         system_prompt=PLANNER_SYS_PROMPT,
         name="Planner Agent",
-        retries=3,
+        retries=PLANNER_AGENT_RETRIES,
         model_settings=ModelSettings(
             temperature=0.5,
-            timeout=settings.MODEL_TIMEOUT_SECONDS,
+            timeout=PLANNER_AGENT_TIMEOUT_SECONDS,
         ),
         output_type=PLANNER_AGENT_OP,
     )

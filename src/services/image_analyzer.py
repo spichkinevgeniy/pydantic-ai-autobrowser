@@ -1,4 +1,5 @@
 import logging
+from asyncio import wait_for
 from functools import lru_cache
 from pathlib import Path
 
@@ -8,6 +9,8 @@ from PIL import Image
 from src.config import settings
 
 logger = logging.getLogger(__name__)
+
+SCREENSHOT_ANALYSIS_TIMEOUT_SECONDS = 25.0
 
 
 @lru_cache(maxsize=1)
@@ -62,27 +65,29 @@ Previous SS Analysis Responses:
 <rules>
 1. You have been provided 2 screenshots, one is the state of the webpage before the action was performed and the other is the state of the webpage after the action was performed.
 2. If the action was successfully performed, you should be able to see the expected changes in the webpage.
-3. We do not need a generic description of what changed. We need an inference on whether the intended action was successfully performed or not.
-4. If the action was successfully performed, explicitly say so and describe the visible changes that confirm it.
-5. If the action was not successfully performed, explicitly say so and describe the visible evidence that indicates failure or incomplete execution.
-6. Confirm whether the current action caused any previous actions to fail or not satisfy the request.
-7. If the Browser Agent says the action succeeded, visually confirm whether it actually did.
+3. We do not need generic description of what you see in the screenshots that has changed, we need the information and inference on whether the action was successfully performed or not.
+4. If the action was successfully performed, then you need to convey that information and along with that information, you also need to provide information on what changes you see in the screenshots that might have resulted from the action.
+5. If the action was not successfully performed, then you need to convey that information and along with that information, you also need to provide information on what changes you see in the screenshots that might have resulted from the action that indicate the tool call was not executed.
+6. You also need to confirm whether the current action caused any previous actions to fail or not satisfy the request. For example : Entering text in the first field and pressing enter can take us to the next field but any failure in the first field that has occured should be reported. 
+7. The Browser Agent will execute an action such an entering fields or clicking buttons and then say that "the action was successfull" but you have to visually confirm whether the text was entered and completed or it has just been entered and we need further action to complete the text entry.
+
 
 <special_case>
-1. If the action is searching through an API and the webpage does not visibly change, state that the screenshot was unchanged.
-2. In that search case, an unchanged screenshot does not automatically mean failure.
-</special_case>
+1. One special case is that when the action is searching, we are using SERP API so it will be that the webpage does not change at all. In that case, you need to provide information that the screenshot was unchanged. 
+2. So if the action is searching then you need to provide information that the SS was unchanged. The screenshot being unchanges in the case of search is a special case and does not conclude failure of the search action.
+</special_case>   
 
-<output_rules>
-1. Explicitly mention whether the action was successfully performed.
-2. Check whether what we actually wanted was achieved.
-3. Specify whether any new elements appeared or disappeared.
-4. Mention elements related to the intended action.
-5. If the current action caused previous actions to fail, explicitly mention which elements were affected and how.
-6. Explicitly confirm whether the Browser Agent's success claim matches the visual evidence.
+<output rules>
+1. You need to explicitly mention whether the action was successfully performed or not.
+2. You need to check in with what we actually wanted and if that was achieved according to the changes in the screenshots.
+3. You also need to specify if any new elements have appeared or any elements have disappeared.
+4. You need to also explictly mention about any elements related to the action or the element of interest in the screenshots.
+5. If the current action caused any previous actions to fail, then you need to explicitly mention that and tell the Critique exactly what fields were affected and in precisely what manner. 
+6. You also need to explicitly confirm and reassure the Critique that if Browser Agent is saying this action was executed successfully, then was it actually executed successfully or not.
+
 </output_rules>
 </rules>
-""".strip()
+"""
 
     async def analyze_images(self) -> str:
         """Analyze before/after screenshots with Gemini multimodal input."""
@@ -102,13 +107,22 @@ Previous SS Analysis Responses:
             return ""
 
         try:
-            response = await self.client.aio.models.generate_content(
-                model=settings.SCREENSHOT_ANALYSIS_MODEL,
-                contents=[
-                    types.Part.from_text(text=self._build_prompt()),
-                    types.Part.from_bytes(data=self.image1_path.read_bytes(), mime_type="image/png"),
-                    types.Part.from_bytes(data=self.image2_path.read_bytes(), mime_type="image/png"),
-                ],
+            response = await wait_for(
+                self.client.aio.models.generate_content(
+                    model=settings.SCREENSHOT_ANALYSIS_MODEL,
+                    contents=[
+                        types.Part.from_text(text=self._build_prompt()),
+                        types.Part.from_bytes(
+                            data=self.image1_path.read_bytes(),
+                            mime_type="image/png",
+                        ),
+                        types.Part.from_bytes(
+                            data=self.image2_path.read_bytes(),
+                            mime_type="image/png",
+                        ),
+                    ],
+                ),
+                timeout=SCREENSHOT_ANALYSIS_TIMEOUT_SECONDS,
             )
         except Exception:
             logger.exception("Gemini screenshot analysis failed")

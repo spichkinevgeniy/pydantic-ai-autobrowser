@@ -72,6 +72,22 @@ BROWSER_SYS_PROMPT = """
        for reliable text entry.
 </enter_text>
 
+<post_action_verification>
+    1. For actions that are expected to change page state, such as clicking filters, tabs, toggles,
+       sort options, menus, or buttons that should activate or reveal something, verify the result
+       after the action using Playwright MCP tools.
+    2. Verification should be done with a fresh `playwright_browser_snapshot`,
+       `playwright_browser_run_code`, `playwright_browser_wait_for`, or another appropriate browser
+       tool.
+    3. Do not conclude that the action succeeded only because the click tool returned success.
+       Confirm that the expected UI state actually changed.
+    4. When relevant, verify which option is active, selected, expanded, visible, or hidden.
+    5. For filters, tabs, and sorting controls, after clicking, verify which option is now active
+       before saying that the page is showing the requested content.
+    6. If verification shows that the expected state did not change, clearly report that the action
+       did not achieve the intended result.
+</post_action_verification>
+
 <output_generation>
     1. Once the task is completed or cannot be completed, return a short summary of the actions you
        performed to accomplish the task and what worked and what did not.
@@ -159,6 +175,9 @@ model = GoogleModel(settings.MODEL_NAME, provider=provider)
 
 logger = logging.getLogger(__name__)
 
+BROWSER_AGENT_RETRIES = 1
+BROWSER_AGENT_TIMEOUT_SECONDS = 45.0
+
 
 @lru_cache(maxsize=1)
 def get_playwright_mcp_server() -> MCPServerStdio:
@@ -179,10 +198,10 @@ def get_browser_agent() -> Agent:
         system_prompt=BROWSER_SYS_PROMPT,
         deps_type=BrowserStepDeps,
         name="Browser Agent",
-        retries=3,
+        retries=BROWSER_AGENT_RETRIES,
         model_settings=ModelSettings(
             temperature=0.2,
-            timeout=settings.MODEL_TIMEOUT_SECONDS,
+            timeout=BROWSER_AGENT_TIMEOUT_SECONDS,
         ),
         toolsets=[get_playwright_mcp_server()],
     )

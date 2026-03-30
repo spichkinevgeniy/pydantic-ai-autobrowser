@@ -103,6 +103,9 @@ model = GoogleModel(settings.MODEL_NAME, provider=provider)
 
 logger = logging.getLogger(__name__)
 
+CRITIQUE_AGENT_RETRIES = 1
+CRITIQUE_AGENT_TIMEOUT_SECONDS = 25.0
+
 
 @lru_cache(maxsize=1)
 def get_critique_agent() -> Agent:
@@ -110,10 +113,10 @@ def get_critique_agent() -> Agent:
         model=model,
         system_prompt=CA_SYS_PROMPT,
         name="Critique Agent",
-        retries=3,
+        retries=CRITIQUE_AGENT_RETRIES,
         model_settings=ModelSettings(
             temperature=0.2,
-            timeout=settings.MODEL_TIMEOUT_SECONDS,
+            timeout=CRITIQUE_AGENT_TIMEOUT_SECONDS,
         ),
         output_type=CritiqueOutput,
     )

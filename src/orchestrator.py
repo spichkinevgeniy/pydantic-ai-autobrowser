@@ -1,11 +1,14 @@
+import asyncio
 import json
 import logging
+import re
 from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
 from pprint import pformat
 from typing import Any
 
+from pydantic_ai.exceptions import ModelHTTPError
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
 from src.agents.browser_agent import get_playwright_mcp_server, run_browser_step
 from src.agents.critique_agent import run_critique
@@ -116,6 +119,16 @@ def serialize_content(content: Any) -> str:
     return str(content)
 
 
+def strip_snapshot_refs(text: str | None) -> str:
+    """Remove volatile Playwright snapshot refs before forwarding text across steps."""
+    if not text:
+        return ""
+
+    sanitized = re.sub(r"`?ref\s*=\s*[^`\s,.;:)\]]+`?", "[snapshot-ref]", text)
+    sanitized = re.sub(r"\[ref=[^\]]+\]", "[ref]", sanitized)
+    return sanitized
+
+
 def build_critique_tool_response(
     tool_interactions_str: str | None,
     browser_summary: str,
@@ -123,9 +136,9 @@ def build_critique_tool_response(
     """Build critique input from tool interactions and the browser agent summary."""
     sections: list[str] = []
     if tool_interactions_str:
-        sections.append("Tool interactions:\n" + tool_interactions_str.rstrip())
+        sections.append("Tool interactions:\n" + strip_snapshot_refs(tool_interactions_str).rstrip())
     if browser_summary:
-        sections.append("Browser summary:\n" + browser_summary.strip())
+        sections.append("Browser summary:\n" + strip_snapshot_refs(browser_summary).strip())
     return "\n\n".join(sections)
 
 
@@ -224,6 +237,53 @@ def filter_dom_messages(
     return filtered_messages
 
 
+def is_transient_model_error(error: Exception) -> bool:
+    """Return True for model/API overload and timeout style errors."""
+    if isinstance(error, ModelHTTPError):
+        return error.status_code in {429, 503, 504}
+
+    error_text = str(error)
+    transient_markers = (
+        "429",
+        "503",
+        "504",
+        "UNAVAILABLE",
+        "DEADLINE_EXCEEDED",
+        "RESOURCE_EXHAUSTED",
+        "high demand",
+    )
+    return any(marker in error_text for marker in transient_markers)
+
+
+async def run_with_transient_retry(
+    label: str,
+    operation,
+):
+    """Retry transient model failures with exponential backoff."""
+    max_attempts = max(1, settings.TRANSIENT_RETRY_ATTEMPTS)
+    base_delay = max(0.0, settings.TRANSIENT_RETRY_BASE_DELAY_SECONDS)
+    logger = logging.getLogger("TransientRetry")
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await operation()
+        except Exception as exc:
+            is_last_attempt = attempt >= max_attempts
+            if not is_transient_model_error(exc) or is_last_attempt:
+                raise
+
+            delay = base_delay * (2 ** (attempt - 1))
+            logger.warning(
+                "%s transient model error on attempt %s/%s: %s. Retrying in %.1fs",
+                label,
+                attempt,
+                max_attempts,
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+
+
 class Orchestrator:
     def __init__(self) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -272,9 +332,12 @@ class Orchestrator:
                             format_payload(validated_history),
                         )
 
-                        planner_output = await create_plan(
-                            planner_prompt,
-                            message_history=validated_history,
+                        planner_output = await run_with_transient_retry(
+                            "planner",
+                            lambda: create_plan(
+                                planner_prompt,
+                                message_history=validated_history,
+                            ),
                         )
 
                         planner_new_messages = planner_output.new_messages()
@@ -306,9 +369,12 @@ class Orchestrator:
                             self.iteration_counter,
                             full_page=settings.SCREENSHOT_FULL_PAGE,
                         )
-                        browser_output = await run_browser_step(
-                            current_step=current_step,
-                            message_history=browser_history,
+                        browser_output = await run_with_transient_retry(
+                            "browser",
+                            lambda: run_browser_step(
+                                current_step=current_step,
+                                message_history=browser_history,
+                            ),
                         )
                         post_action_ss = await self.screenshot_service.capture(
                             "post",
@@ -372,12 +438,15 @@ class Orchestrator:
                             str(browser_output.output),
                         )
 
-                        critique_response = await run_critique(
-                            current_step=current_step,
-                            orignal_plan=plan,
-                            tool_response=critique_tool_response,
-                            ss_analysis=ss_analysis,
-                            message_history=critique_history,
+                        critique_response = await run_with_transient_retry(
+                            "critique",
+                            lambda: run_critique(
+                                current_step=current_step,
+                                orignal_plan=plan,
+                                tool_response=critique_tool_response,
+                                ss_analysis=ss_analysis,
+                                message_history=critique_history,
+                            ),
                         )
                         self.conversation_handler.add_critique_message(critique_response)
 
@@ -409,10 +478,11 @@ class Orchestrator:
                                 final_response=critique_response.output.final_response,
                             )
 
+                        sanitized_feedback = strip_snapshot_refs(critique_response.output.feedback)
                         planner_prompt = (
                             f"User Query: {user_query}\n"
                             f"Previous Plan:\n{plan}\n\n"
-                            f"Feedback:\n{critique_response.output.feedback}"
+                            f"Feedback:\n{sanitized_feedback}"
                         )
                         consecutive_step_errors = 0
                     except Exception:
