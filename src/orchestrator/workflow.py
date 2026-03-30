@@ -1,9 +1,10 @@
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, TypedDict
 
-from src.agents.browser_agent import run_browser_step
+from src.agents.browser_agent import get_current_browser_url, run_browser_step
 from src.agents.critique_agent import run_critique
 from src.agents.planner_agent import create_plan
 from src.config import settings
@@ -76,16 +77,31 @@ def looks_like_refusal_text(text: str) -> bool:
     return any(marker in normalized for marker in REFUSAL_MARKERS)
 
 
-def build_human_assisted_replan_feedback(user_query: str, refusal_step: str) -> str:
+def build_human_assisted_replan_feedback(
+    user_query: str,
+    refusal_step: str,
+    current_url: str,
+) -> str:
     return (
         f"The planner produced a refusal-like next step instead of an executable browser action.\n"
         f"User query: {user_query}\n"
+        f"Current URL: {current_url or 'about:blank'}\n"
         f"Rejected next step: {refusal_step}\n\n"
         "Replan into a human-assisted browser workflow. If the task involves the user's own account, "
         "open the relevant website, allow the user to complete login or verification manually in the "
         "browser, then continue with atomic browser actions. Do not output another refusal unless the "
         "task is impossible even after manual user assistance."
     )
+
+
+def build_planner_prompt(
+    *,
+    base_prompt: str,
+    current_url: str,
+) -> str:
+    prompt_without_url = re.sub(r"\nCurrent URL:.*$", "", base_prompt, flags=re.MULTILINE).rstrip()
+    planner_url = current_url or "about:blank"
+    return f"{prompt_without_url}\nCurrent URL: {planner_url}"
 
 
 async def run_browser_step_with_progress(
@@ -359,11 +375,17 @@ async def run_workflow(
                 len(validated_history),
                 format_payload(validated_history),
             )
+            state.current_url = await get_current_browser_url()
+            planner_prompt = build_planner_prompt(
+                base_prompt=state.planner_prompt,
+                current_url=state.current_url,
+            )
+            logger.info("Planner current URL context: %s", state.current_url or "about:blank")
 
             planner_output = await run_with_transient_retry(
                 "planner",
                 lambda: create_plan(
-                    state.planner_prompt,
+                    planner_prompt,
                     message_history=validated_history,
                 ),
             )
@@ -384,6 +406,7 @@ async def run_workflow(
                 state.planner_prompt = build_human_assisted_replan_feedback(
                     user_query,
                     state.current_step,
+                    state.current_url,
                 )
                 continue
 
@@ -393,6 +416,7 @@ async def run_workflow(
                 iteration=state.iteration_counter,
                 current_step=state.current_step,
                 plan=state.plan,
+                data={"current_url": state.current_url},
             )
 
             browser_stage = await execute_browser_stage(

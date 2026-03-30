@@ -33,6 +33,9 @@ class ConsoleProgressUI:
 
         if event.event_type == "planner_completed":
             self._section("PLANNER", self.BLUE)
+            current_url = str(event.data.get("current_url", "")).strip()
+            if current_url:
+                print(f"  Current URL: {current_url}")
             print(f"  Next step: {event.current_step or '-'}")
             if event.plan and event.plan != self._last_plan:
                 self._last_plan = event.plan

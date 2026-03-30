@@ -14,6 +14,7 @@ class OrchestratorState:
     max_step_errors: int = 3
     plan: str = ""
     current_step: str = ""
+    current_url: str = ""
     planner_prompt: str = ""
     waiting_for_user: bool = False
     pending_human_request: HumanActionRequest | None = None
@@ -35,6 +36,7 @@ class OrchestratorState:
         self.consecutive_step_errors = 0
         self.plan = ""
         self.current_step = ""
+        self.current_url = ""
         self.planner_prompt = f"User Query: {user_query}\nFeedback: None"
         self.waiting_for_user = False
         self.pending_human_request = None

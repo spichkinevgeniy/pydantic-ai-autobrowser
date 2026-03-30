@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     ENABLE_SCREENSHOTS: bool = Field(default=True, alias="ENABLE_SCREENSHOTS")
     ENABLE_SS_ANALYSIS: bool = Field(default=True, alias="ENABLE_SS_ANALYSIS")
     SCREENSHOT_FULL_PAGE: bool = Field(default=False, alias="SCREENSHOT_FULL_PAGE")
+    PLAYWRIGHT_USER_DATA_DIR: Path = Field(
+        default=ROOT_DIR / "logs" / "playwright-user-data",
+        alias="PLAYWRIGHT_USER_DATA_DIR",
+    )
 
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",

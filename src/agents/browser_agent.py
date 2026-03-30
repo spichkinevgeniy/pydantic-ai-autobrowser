@@ -1,7 +1,9 @@
 import logging
+import re
 import warnings
 from collections.abc import Sequence
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import BaseModel
 from pydantic_ai import Agent
@@ -198,13 +200,26 @@ logger = logging.getLogger(__name__)
 
 BROWSER_AGENT_RETRIES = 1
 BROWSER_AGENT_TIMEOUT_SECONDS = 45.0
+CURRENT_TAB_URL_PATTERN = re.compile(r"\(current\)\s.*\((?P<url>[^)]+)\)")
+PAGE_URL_PATTERN = re.compile(r"^- Page URL:\s*(?P<url>.+)$", re.MULTILINE)
+
+
+def get_playwright_user_data_dir() -> Path:
+    user_data_dir = settings.PLAYWRIGHT_USER_DATA_DIR.resolve()
+    user_data_dir.mkdir(parents=True, exist_ok=True)
+    return user_data_dir
 
 
 @lru_cache(maxsize=1)
 def get_playwright_mcp_server() -> MCPServerStdio:
     return MCPServerStdio(
         "npx",
-        args=["-y", "@playwright/mcp@latest"],
+        args=[
+            "-y",
+            "@playwright/mcp@latest",
+            "--user-data-dir",
+            str(get_playwright_user_data_dir()),
+        ],
         cwd=ROOT_DIR,
         tool_prefix="playwright",
         timeout=30,
@@ -227,6 +242,43 @@ def get_browser_agent() -> Agent:
         output_type=BrowserStepResult,
         toolsets=[get_playwright_mcp_server()],
     )
+
+
+def _extract_current_url(raw_result: object) -> str:
+    result_text = str(raw_result)
+    current_tab_match = CURRENT_TAB_URL_PATTERN.search(result_text)
+    if current_tab_match:
+        return current_tab_match.group("url").strip()
+
+    page_url_match = PAGE_URL_PATTERN.search(result_text)
+    if page_url_match:
+        return page_url_match.group("url").strip()
+
+    return ""
+
+
+async def get_current_browser_url() -> str:
+    server = get_playwright_mcp_server()
+    if not server.is_running:
+        return ""
+
+    try:
+        tabs_result = await server.direct_call_tool("browser_tabs", {"action": "list"})
+        current_url = _extract_current_url(tabs_result)
+        if current_url:
+            return current_url
+    except Exception:
+        logger.exception("Failed to read current browser URL from browser_tabs")
+
+    try:
+        snapshot_result = await server.direct_call_tool("browser_snapshot", {})
+        current_url = _extract_current_url(snapshot_result)
+        if current_url:
+            return current_url
+    except Exception:
+        logger.exception("Failed to read current browser URL from browser_snapshot")
+
+    return ""
 
 
 async def run_browser_step(
