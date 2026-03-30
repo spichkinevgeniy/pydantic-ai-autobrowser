@@ -7,7 +7,7 @@ from src.config import ROOT_DIR, settings
 logger = logging.getLogger(__name__)
 
 
-class ScreenshotService:
+class ScreenshotHelper:
     def __init__(self, screenshot_dir: Path | None = None) -> None:
         self.screenshot_dir = (screenshot_dir or settings.SCREENSHOT_DIR).resolve()
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)

@@ -3,7 +3,7 @@ import logging
 import sys
 
 from src.logging_setup import configure_logging
-from src.orchestrator import Orchestrator
+from src.orchestrator import OrchestratorEvent, run_orchestration
 
 
 def configure_stdio() -> None:
@@ -12,6 +12,21 @@ def configure_stdio() -> None:
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
             reconfigure(encoding="utf-8")
+
+
+def print_event(event: OrchestratorEvent) -> None:
+    if event.event_type == "run_started":
+        print("Запуск orchestration...")
+    elif event.event_type == "iteration_started" and event.iteration is not None:
+        print(f"\n[Итерация {event.iteration}]")
+    elif event.event_type == "planner_completed" and event.current_step:
+        print(f"Planner: {event.current_step}")
+    elif event.event_type == "browser_completed":
+        print("Browser: шаг выполнен")
+    elif event.event_type == "critique_completed":
+        print("Critique: шаг оценен")
+    elif event.event_type == "run_failed" and event.message:
+        print(f"Ошибка выполнения: {event.message}")
 
 
 async def async_main() -> int:
@@ -27,10 +42,8 @@ async def async_main() -> int:
         print("Пустой запрос. Выполнять нечего.")
         return 1
 
-    orchestrator = Orchestrator()
-
     try:
-        result = await orchestrator.run(user_query)
+        result = await run_orchestration(user_query, on_event=print_event)
     except Exception:
         logger.exception("Во время обработки запроса произошла ошибка")
         print("Не удалось обработать запрос. Подробности смотри в logs/orchestrator.log.")
