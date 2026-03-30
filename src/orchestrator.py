@@ -99,19 +99,14 @@ class Orchestrator:
 
                     if self.iteration_counter == 1:
                         self.logger.info("Полный план на первой итерации:\n%s", plan)
-
-                    self.terminate = True
-                    return OrchestratorRunResult(
-                        user_query=user_query,
-                        plan=plan,
-                        next_step=current_step,
-                    )
                 except Exception:
                     self.logger.exception(
                         "Произошла ошибка планировщика на итерации %s",
                         self.iteration_counter,
                     )
                     raise
+
+                # Browser Execution
 
             raise RuntimeError("Оркестратор завершил цикл без результата")
         except Exception:

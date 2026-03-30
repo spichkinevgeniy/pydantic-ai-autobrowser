@@ -229,6 +229,9 @@ def get_planner_agent() -> Agent:
     )
 
 
+planner_agent = get_planner_agent()
+
+
 async def create_plan(
     user_query: str,
     message_history: Sequence[ModelMessage] | None = None,
@@ -236,9 +239,10 @@ async def create_plan(
     logger.info("Планировщик начал обработку запроса")
     logger.info("Входной запрос планировщика: %s", user_query)
 
-    result = await get_planner_agent().run(
+    result = await planner_agent.run(
         user_prompt=user_query,
         message_history=message_history,
     )
-    logger.info("Планировщик построил план. Следующий шаг: %s", result.output.next_step)
+    logger.info("Планировщик построил план. Следующий шаг: %s",
+                result.output.next_step)
     return result
