@@ -27,7 +27,11 @@ class Orchestrator:
         self.state.reset_for_run(user_query)
         ImageAnalyzer.clear_history()
         await self.start()
-        self.emit_event("run_started", message="Orchestration started")
+        self.emit_event(
+            "run_started",
+            message="Orchestration started",
+            data={"user_query": user_query},
+        )
 
         try:
             return await run_workflow(self, user_query)

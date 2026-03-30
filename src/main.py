@@ -1,9 +1,9 @@
 import asyncio
 import logging
 import sys
+import warnings
 
 from src.logging_setup import configure_logging
-from src.orchestrator import OrchestratorEvent, run_orchestration
 
 
 def configure_stdio() -> None:
@@ -14,51 +14,46 @@ def configure_stdio() -> None:
             reconfigure(encoding="utf-8")
 
 
-def print_event(event: OrchestratorEvent) -> None:
-    if event.event_type == "run_started":
-        print("Запуск orchestration...")
-    elif event.event_type == "iteration_started" and event.iteration is not None:
-        print(f"\n[Итерация {event.iteration}]")
-    elif event.event_type == "planner_completed" and event.current_step:
-        print(f"Planner: {event.current_step}")
-    elif event.event_type == "browser_completed":
-        print("Browser: шаг выполнен")
-    elif event.event_type == "critique_completed":
-        print("Critique: шаг оценен")
-    elif event.event_type == "run_failed" and event.message:
-        print(f"Ошибка выполнения: {event.message}")
+def configure_warnings() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        message=r".*_UnionGenericAlias.*deprecated.*",
+        category=DeprecationWarning,
+        module=r"google\.genai\.types",
+    )
+
+
+def parse_initial_query(argv: list[str]) -> str:
+    if len(argv) <= 1:
+        return ""
+    return " ".join(argv[1:]).strip()
 
 
 async def async_main() -> int:
     configure_stdio()
-    log_file = configure_logging()
-    logger = logging.getLogger("main")
-    logger.info("Приложение запущено")
-    logger.info("Логи записываются в %s", log_file)
+    configure_warnings()
+    from src.orchestrator import run_orchestration
+    from src.ui import ConsoleProgressUI
 
-    user_query = input("Введите запрос на автоматизацию браузера: ").strip()
+    log_file = configure_logging(console=False)
+    ui = ConsoleProgressUI(log_file)
+    initial_query = parse_initial_query(sys.argv)
+    logger = logging.getLogger("main")
+    user_query = initial_query or input("Введите запрос на автоматизацию браузера: ").strip()
     if not user_query:
         logger.warning("Из консоли получен пустой запрос")
         print("Пустой запрос. Выполнять нечего.")
         return 1
 
     try:
-        result = await run_orchestration(user_query, on_event=print_event)
+        result = await run_orchestration(user_query, on_event=ui.handle_event)
     except Exception:
         logger.exception("Во время обработки запроса произошла ошибка")
-        print("Не удалось обработать запрос. Подробности смотри в logs/orchestrator.log.")
+        print("\nНе удалось обработать запрос.")
+        print(f"Трассировка: {log_file}")
         return 1
 
-    print("\nПлан:")
-    print(result.plan)
-    if result.final_response:
-        print("\nФинальный ответ:")
-        print(result.final_response)
-    else:
-        print("\nСледующий шаг:")
-        print(result.next_step)
-
-    logger.info("Приложение завершилось успешно")
+    ui.render_result(result)
     return 0
 
 

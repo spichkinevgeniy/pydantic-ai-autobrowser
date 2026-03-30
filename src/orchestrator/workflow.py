@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 
@@ -19,6 +20,36 @@ from src.types import OrchestratorRunResult
 from src.utils.image_analysis import ImageAnalyzer
 
 logger = logging.getLogger(__name__)
+BROWSER_PROGRESS_HEARTBEAT_SECONDS = 5.0
+
+
+async def run_browser_step_with_progress(orchestrator, *, current_step: str, message_history):
+    browser_task = asyncio.create_task(
+        run_with_transient_retry(
+            "browser",
+            lambda: run_browser_step(
+                current_step=current_step,
+                message_history=message_history,
+            ),
+        )
+    )
+    heartbeat_count = 0
+
+    while True:
+        done, _ = await asyncio.wait(
+            {browser_task},
+            timeout=BROWSER_PROGRESS_HEARTBEAT_SECONDS,
+        )
+        if browser_task in done:
+            return await browser_task
+
+        heartbeat_count += 1
+        orchestrator.emit_event(
+            "browser_running",
+            message=f"Browser agent is still working ({heartbeat_count * int(BROWSER_PROGRESS_HEARTBEAT_SECONDS)}s)",
+            current_step=current_step,
+            data={"elapsed_seconds": heartbeat_count * int(BROWSER_PROGRESS_HEARTBEAT_SECONDS)},
+        )
 
 
 async def run_workflow(orchestrator, user_query: str) -> OrchestratorRunResult:
@@ -68,6 +99,7 @@ async def run_workflow(orchestrator, user_query: str) -> OrchestratorRunResult:
 
             tool_interactions_str: str | None = None
             ss_analysis = ""
+            browser_summary = ""
             pre_action_ss: Path | None = None
             post_action_ss: Path | None = None
 
@@ -77,12 +109,10 @@ async def run_workflow(orchestrator, user_query: str) -> OrchestratorRunResult:
                 state.iteration_counter,
                 full_page=settings.SCREENSHOT_FULL_PAGE,
             )
-            browser_output = await run_with_transient_retry(
-                "browser",
-                lambda: run_browser_step(
-                    current_step=state.current_step,
-                    message_history=browser_history,
-                ),
+            browser_output = await run_browser_step_with_progress(
+                orchestrator,
+                current_step=state.current_step,
+                message_history=browser_history,
             )
             post_action_ss = await state.screenshot_helper.capture(
                 "post",
@@ -91,6 +121,7 @@ async def run_workflow(orchestrator, user_query: str) -> OrchestratorRunResult:
             )
 
             state.conversation_handler.add_browser_nav_message(browser_output)
+            browser_summary = strip_snapshot_refs(str(browser_output.output)).strip()
 
             browser_new_messages = browser_output.new_messages()
             state.message_histories["browser"].extend(browser_new_messages)
@@ -134,6 +165,8 @@ async def run_workflow(orchestrator, user_query: str) -> OrchestratorRunResult:
                 iteration=state.iteration_counter,
                 current_step=state.current_step,
                 data={
+                    "browser_summary": browser_summary,
+                    "ss_analysis": strip_snapshot_refs(ss_analysis),
                     "pre_screenshot": str(pre_action_ss) if pre_action_ss else "",
                     "post_screenshot": str(post_action_ss) if post_action_ss else "",
                 },
@@ -168,13 +201,17 @@ async def run_workflow(orchestrator, user_query: str) -> OrchestratorRunResult:
             logger.info("Conversation appended to: %s", saved_path)
             logger.info("Critique feedback:\n%s", critique_response.output.feedback)
             logger.info("Critique terminate=%s", critique_response.output.terminate)
+            sanitized_feedback = strip_snapshot_refs(critique_response.output.feedback)
 
             orchestrator.emit_event(
                 "critique_completed",
                 message="Critique evaluated the current step",
                 iteration=state.iteration_counter,
                 current_step=state.current_step,
-                data={"terminate": critique_response.output.terminate},
+                data={
+                    "terminate": critique_response.output.terminate,
+                    "feedback": sanitized_feedback,
+                },
             )
 
             if critique_response.output.terminate:
@@ -195,7 +232,6 @@ async def run_workflow(orchestrator, user_query: str) -> OrchestratorRunResult:
                 )
                 return result
 
-            sanitized_feedback = strip_snapshot_refs(critique_response.output.feedback)
             state.planner_prompt = (
                 f"User Query: {user_query}\n"
                 f"Previous Plan:\n{state.plan}\n\n"

@@ -1,12 +1,20 @@
 import logging
+import warnings
 from asyncio import wait_for
 from functools import lru_cache
 from pathlib import Path
 
-from google import genai
-from google.genai import types
-from PIL import Image
-from src.config import settings
+warnings.filterwarnings(
+    "ignore",
+    message=r".*_UnionGenericAlias.*deprecated.*",
+    category=DeprecationWarning,
+    module=r"google\.genai\.types",
+)
+
+from google import genai  # noqa: E402
+from google.genai import types  # noqa: E402
+from PIL import Image  # noqa: E402
+from src.config import settings  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

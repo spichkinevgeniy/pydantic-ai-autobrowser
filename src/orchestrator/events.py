@@ -7,6 +7,7 @@ EventType = Literal[
     "run_started",
     "iteration_started",
     "planner_completed",
+    "browser_running",
     "browser_completed",
     "critique_completed",
     "run_failed",
