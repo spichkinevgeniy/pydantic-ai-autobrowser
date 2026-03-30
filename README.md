@@ -82,33 +82,49 @@ The loop ends when the goal is reached, the user stops a manual or sensitive ste
 
 ```text
 .
+|-- .env.example
+|-- pyproject.toml
+|-- README.md
+|-- tests/
+|   |-- test_orchestration_integration.py
+|   `-- test_workflow_helpers.py
 |-- src/
+|   |-- main.py
+|   |-- config.py
+|   |-- logging_setup.py
+|   |-- types.py
 |   |-- agents/
 |   |   |-- planner_agent.py
 |   |   |-- browser_agent.py
 |   |   `-- critique_agent.py
 |   |-- orchestrator/
-|   |   |-- workflow.py
 |   |   |-- engine.py
+|   |   |-- events.py
+|   |   |-- helpers.py
 |   |   |-- runner.py
-|   |   `-- state.py
+|   |   |-- state.py
+|   |   |-- workflow.py
+|   |   `-- __init__.py
 |   |-- ui/
+|   |   |-- __init__.py
 |   |   `-- console.py
 |   |-- utils/
-|   |   |-- screenshot.py
 |   |   |-- image_analysis.py
-|   |   `-- msg_parser.py
-|   |-- config.py
-|   `-- logging_setup.py
+|   |   |-- msg_parser.py
+|   |   `-- screenshot.py
 `-- logs/
 ```
 
+- `.env.example`: template for required environment variables.
+- `pyproject.toml`: project metadata, dependencies, and tool configuration.
+- `tests/`: integration and unit tests for orchestration and helper logic.
 - `src/agents/`: planner, browser, and critique agents.
 - `src/orchestrator/`: run loop, state management, retries, and event flow.
 - `src/ui/`: console-facing interaction for prompts, pauses, and run output.
 - `src/utils/`: screenshots, screenshot analysis, and message parsing helpers.
 - `src/main.py`: CLI entrypoint that starts the interactive or one-shot run.
 - `src/config.py`: environment-driven runtime settings.
+- `src/types.py`: shared Pydantic models and callback type aliases.
 - `src/logging_setup.py`: logging and observability setup.
 - `logs/`: runtime artifacts such as logs, screenshots, and saved conversations.
 
