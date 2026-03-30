@@ -43,6 +43,7 @@ def ensure_tool_response_sequence(messages: Sequence[Any]) -> list[Any]:
 def extract_tool_interactions(messages: Sequence[Any]) -> str:
     """Extract tool calls and matching responses from browser agent messages."""
     tool_interactions: dict[str, dict[str, Any]] = {}
+    pending_call_ids: list[str] = []
 
     for msg in messages:
         if getattr(msg, "kind", None) == "response":
@@ -63,12 +64,30 @@ def extract_tool_interactions(messages: Sequence[Any]) -> str:
                         },
                         "response": None,
                     }
+                    pending_call_ids.append(part.tool_call_id)
         elif getattr(msg, "kind", None) == "request":
             for part in msg.parts:
                 if getattr(part, "part_kind", "") == "tool-return":
+                    content = serialize_content(part.content)
                     if part.tool_call_id in tool_interactions:
                         tool_interactions[part.tool_call_id]["response"] = {
-                            "content": part.content,
+                            "content": content,
+                        }
+                        continue
+
+                    # Some MCP tool responses may arrive without a matching id in the
+                    # incremental message slice. Fall back to the latest unresolved call.
+                    unresolved_call_id = next(
+                        (
+                            tool_call_id
+                            for tool_call_id in reversed(pending_call_ids)
+                            if tool_interactions[tool_call_id]["response"] is None
+                        ),
+                        None,
+                    )
+                    if unresolved_call_id is not None:
+                        tool_interactions[unresolved_call_id]["response"] = {
+                            "content": content,
                         }
 
     interactions_str = ""
@@ -82,6 +101,28 @@ def extract_tool_interactions(messages: Sequence[Any]) -> str:
         interactions_str += "---\n"
 
     return interactions_str
+
+
+def serialize_content(content: Any) -> str:
+    """Serialize tool content for logs and critique without losing non-string payloads."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, (dict, list)):
+        return json.dumps(content, ensure_ascii=False, indent=2)
+    return str(content)
+
+
+def build_critique_tool_response(
+    tool_interactions_str: str | None,
+    browser_summary: str,
+) -> str:
+    """Build critique input from tool interactions and the browser agent summary."""
+    sections: list[str] = []
+    if tool_interactions_str:
+        sections.append("Tool interactions:\n" + tool_interactions_str.rstrip())
+    if browser_summary:
+        sections.append("Browser summary:\n" + browser_summary.strip())
+    return "\n\n".join(sections)
 
 
 def filter_tool_interactions_for_critique(tool_interactions_str: str | None) -> str:
@@ -278,7 +319,10 @@ class Orchestrator:
                             tool_interactions_str
                         )
                         critique_history = self.message_histories["critique"]
-                        critique_tool_response = filtered_interactions or str(browser_output.output)
+                        critique_tool_response = build_critique_tool_response(
+                            filtered_interactions,
+                            str(browser_output.output),
+                        )
 
                         critique_response = await run_critique(
                             current_step=current_step,
