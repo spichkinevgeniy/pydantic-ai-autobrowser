@@ -1,6 +1,16 @@
-from pydantic_ai import Agent
+import logging
+from collections.abc import Sequence
+from functools import lru_cache
+
 from pydantic import BaseModel
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.run import AgentRunResult
 from pydantic_ai.settings import ModelSettings
+
+from src.config import settings
 
 PLANNER_SYS_PROMPT = """ 
 <agent_role>
@@ -198,13 +208,37 @@ class PLANNER_AGENT_OP(BaseModel):
     next_step: str
 
 
-planner_agent = Agent(
-    model="gateway/google-vertex:gemini-2.5-flash",
-    system_prompt=PLANNER_SYS_PROMPT,
-    name="Planner Agent",
-    retries=3,
-    model_settings=ModelSettings(
-        temperature=0.5
-    ),
-    output_type=PLANNER_AGENT_OP
-)
+provider = GoogleProvider(api_key=settings.GOOGLE_API_KEY)
+model = GoogleModel(settings.MODEL_NAME, provider=provider)
+
+logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def get_planner_agent() -> Agent:
+    return Agent(
+        model=model,
+        system_prompt=PLANNER_SYS_PROMPT,
+        name="Planner Agent",
+        retries=3,
+        model_settings=ModelSettings(
+            temperature=0.5,
+            timeout=settings.MODEL_TIMEOUT_SECONDS,
+        ),
+        output_type=PLANNER_AGENT_OP
+    )
+
+
+async def create_plan(
+    user_query: str,
+    message_history: Sequence[ModelMessage] | None = None,
+) -> AgentRunResult[PLANNER_AGENT_OP]:
+    logger.info("Планировщик начал обработку запроса")
+    logger.info("Входной запрос планировщика: %s", user_query)
+
+    result = await get_planner_agent().run(
+        user_prompt=user_query,
+        message_history=message_history,
+    )
+    logger.info("Планировщик построил план. Следующий шаг: %s", result.output.next_step)
+    return result
